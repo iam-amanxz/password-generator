@@ -1,12 +1,18 @@
+use inquire::{MultiSelect, Text};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use regex::Regex;
-use std::{env, process};
+use std::process;
 
 const CAPITAL_CHARS: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const SIMPLE_CHARS: &str = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz";
 const SPECIAL_CHARS: &str = "!@#$%^&*!@#$%^&*!@#$%^&*!@#$%^&*!@#$%^&*!@#$%^&*!@#$%^&*!@#$%^&*!@#$%^&*!@#$%^&*!@#$%^&*!@#$%^&*!@#$%^&*!@#$%^&*!@#$%^&*!@#$%^&*";
 const NUMBERS: &str = "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
+
+const TEXT_INCLUDE_CAPITAL: &str = "include capital letters";
+const TEXT_INCLUDE_SIMPLE: &str = "include simple letters";
+const TEXT_INCLUDE_SPECIAL: &str = "include special characters";
+const TEXT_INCLUDE_NUMBERS: &str = "include numbers";
 
 #[derive(Debug)]
 struct Config {
@@ -27,11 +33,7 @@ impl Config {
     ) -> Self {
         Config {
             use_capital,
-            use_simple: if !use_capital && !use_simple && !use_special && !use_number {
-                true
-            } else {
-                use_simple
-            },
+            use_simple,
             use_special,
             use_number,
             length,
@@ -80,72 +82,67 @@ fn generate(config: &Config) -> String {
     password
 }
 
-fn print_suggest_help() {
-    println!("See 'password_generator --help'.");
-}
-
-fn print_help() {
-    println!("Usage: password_generator [--length=length] [--no-capital] [--no-simple] [--no-special] [--no-numbers]");
-    println!("");
-    println!("These are the common arguments supported by the password generator:");
-    println!("--length        Length of the password (5-127), Eg: --length=32, Default: 12");
-    println!("--no-capital    Generate password without capital letters");
-    println!("--no-simple     Generate password without simple letters");
-    println!("--no-special    Generate password without special characters");
-    println!("--no-numbers    Generate password without numbers");
-    println!("");
-    println!("Note: If you provide all arguments, password generator will default to generate password with only simple letters");
-}
-
 fn main() {
-    let args = env::args();
-    let mut use_capital = true;
-    let mut use_simple = true;
-    let mut use_special = true;
-    let mut use_number = true;
-    let mut length: i8 = 12;
+    let mut use_capital = false;
+    let mut use_simple = false;
+    let mut use_special = false;
+    let mut use_number = false;
 
-    for arg in args {
-        if arg.eq("--help") {
-            print_help();
-            process::exit(0);
-        }
-        if arg.eq("--no-capital") {
-            use_capital = false;
-        }
-        if arg.eq("--no-simple") {
-            use_simple = false;
-        }
-        if arg.eq("--no-special") {
-            use_special = false;
-        }
-        if arg.eq("--no-number") {
-            use_number = false;
-        }
-        if arg.starts_with("--length") {
-            let (_, len) = arg.split_once("=").unwrap_or_else(|| {
-                eprintln!(
-                    "Problem parsing arguments. Please try again with the correct arguments."
-                );
-                print_suggest_help();
-                process::exit(1);
-            });
+    let pw_length = Text::new("Enter the password length: (5-127), Default: 12").prompt();
 
-            length = len.parse().unwrap_or_else(|error| {
-                eprintln!("Problem parsing arguments: {error}");
-                print_suggest_help();
-                process::exit(1);
-            });
-
+    let pw_length: i8 = match pw_length {
+        Ok(length) => {
+            let mut length: i32 = length.parse().unwrap_or_else(|_| 12);
             if length < 5 {
-                println!("Length must be between 5-127 characters. Defaulting to 5");
-                print_suggest_help();
                 length = 5;
             }
+            if length > 127 {
+                length = 127;
+            }
+            length as i8
+        }
+        Err(_) => {
+            println!("An error happened when asking for password length, try again later.");
+            process::exit(1);
+        }
+    };
+
+    let options = vec![
+        TEXT_INCLUDE_CAPITAL,
+        TEXT_INCLUDE_SIMPLE,
+        TEXT_INCLUDE_SPECIAL,
+        TEXT_INCLUDE_NUMBERS,
+    ];
+
+    let options = MultiSelect::new("Select one more options:", options).prompt();
+
+    match options {
+        Ok(options) => {
+            if options.contains(&TEXT_INCLUDE_CAPITAL) {
+                use_capital = true
+            }
+            if options.contains(&TEXT_INCLUDE_SIMPLE) {
+                use_simple = true
+            }
+            if options.contains(&TEXT_INCLUDE_SPECIAL) {
+                use_special = true
+            }
+            if options.contains(&TEXT_INCLUDE_NUMBERS) {
+                use_number = true
+            }
+            if options.len() == 0 {
+                use_simple = true;
+            }
+        }
+        Err(_) => {
+            println!("The options could not be processed");
+            process::exit(1);
         }
     }
 
-    let config = Config::new(use_capital, use_simple, use_special, use_number, length);
+    let config = Config::new(use_capital, use_simple, use_special, use_number, pw_length);
     let password = generate(&config);
-    println!("{}", password);
+    println!("{}", "=".repeat(password.len() + 4));
+    println!("| {} |", password);
+    println!("{}", "=".repeat(password.len() + 4));
 }
